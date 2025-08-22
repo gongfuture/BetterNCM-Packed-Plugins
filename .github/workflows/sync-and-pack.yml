@@ -1,0 +1,238 @@
+name: 'Sync and Pack Plugins'
+
+on:
+  workflow_dispatch: # 手动触发
+  schedule:
+    - cron: '0 */6 * * *' # 每6小时检查一次
+
+concurrency:
+  group: 'sync-and-pack'
+  cancel-in-progress: true
+
+jobs:
+  sync-and-pack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout mirror repo
+        uses: actions/checkout@v4
+        with:
+          path: 'mirror'
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Checkout source repo
+        uses: actions/checkout@v4
+        with:
+          repository: 'BetterNCM/BetterNCM-Plugins'
+          path: 'source'
+          fetch-depth: 0
+
+      - name: Check for plugins-data changes
+        id: check-changes
+        run: |
+          cd source
+          # 获取最新的 plugins-data 目录的提交hash
+          if ! LATEST_COMMIT=$(git log -1 --format="%H" -- plugins-data 2>/dev/null); then
+            echo "❌ 无法获取 plugins-data 的提交历史"
+            exit 1
+          fi
+          echo "latest_commit=$LATEST_COMMIT" >> $GITHUB_OUTPUT
+          echo "✅ 最新提交: $LATEST_COMMIT"
+          
+          cd ../mirror
+          # 检查是否有记录上次同步的提交hash
+          if [ -f .last-sync-commit ]; then
+            LAST_SYNC_COMMIT=$(cat .last-sync-commit)
+            echo "last_sync_commit=$LAST_SYNC_COMMIT" >> $GITHUB_OUTPUT
+            echo "📋 上次同步: $LAST_SYNC_COMMIT"
+            
+            # 比较是否有变化
+            if [ "$LATEST_COMMIT" != "$LAST_SYNC_COMMIT" ]; then
+              echo "has_changes=true" >> $GITHUB_OUTPUT
+              echo "🔄 检测到 plugins-data 有更新: $LAST_SYNC_COMMIT -> $LATEST_COMMIT"
+            else
+              echo "has_changes=false" >> $GITHUB_OUTPUT
+              echo "✅ plugins-data 无更新，跳过打包"
+            fi
+          else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "🆕 首次运行，将进行完整打包"
+          fi
+
+      - name: Set up Node.js
+        if: steps.check-changes.outputs.has_changes == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        if: steps.check-changes.outputs.has_changes == 'true'
+        run: |
+          cd source
+          if [ -f package.json ]; then
+            echo "📦 安装根目录依赖..."
+            npm ci || npm install
+          else
+            echo "⚠️ 未找到根目录 package.json，跳过"
+          fi
+
+      - name: Install script dependencies
+        if: steps.check-changes.outputs.has_changes == 'true'
+        run: |
+          cd source/scripts
+          # 检查是否存在package.json
+          if [ ! -f package.json ]; then
+            echo "📝 创建 scripts/package.json..."
+            cat > package.json << 'EOF'
+          {
+            "name": "pack-plugins-scripts",
+            "version": "1.0.0",
+            "type": "module",
+            "dependencies": {
+              "compressing": "^1.6.2",
+              "fs-extra": "^11.1.0",
+              "compare-versions": "^5.0.1"
+            }
+          }
+          EOF
+          fi
+          
+          echo "📦 安装脚本依赖..."
+          npm install
+
+      - name: Create backup of current workflows
+        if: steps.check-changes.outputs.has_changes == 'true'
+        run: |
+          echo "💾 备份当前 workflows..."
+          mkdir -p /tmp/mirror-workflows
+          if [ -d "mirror/.github/workflows" ]; then
+            cp -r mirror/.github/workflows/* /tmp/mirror-workflows/ 2>/dev/null || true
+            echo "✅ Workflows 已备份"
+          else
+            echo "⚠️ 未找到现有 workflows"
+          fi
+
+      - name: Run pack script
+        if: steps.check-changes.outputs.has_changes == 'true'
+        timeout-minutes: 20
+        run: |
+          cd source/scripts/pack-plugins
+          echo "🔨 开始执行打包脚本..."
+          
+          # 检查打包脚本是否存在
+          if [ ! -f pack-plugins.js ]; then
+            echo "❌ 打包脚本不存在"
+            exit 1
+          fi
+          
+          # 执行打包
+          node pack-plugins.js
+          echo "✅ 打包完成"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify packed files
+        if: steps.check-changes.outputs.has_changes == 'true'
+        run: |
+          cd source
+          echo "🔍 验证打包结果..."
+          
+          if [ ! -d tmp ]; then
+            echo "❌ 打包输出目录不存在"
+            exit 1
+          fi
+          
+          if [ ! -f tmp/plugins.json ]; then
+            echo "❌ plugins.json 不存在"
+            exit 1
+          fi
+          
+          PLUGIN_COUNT=$(find tmp/plugins -name "*.plugin" 2>/dev/null | wc -l || echo "0")
+          echo "📦 打包的插件数量: $PLUGIN_COUNT"
+          
+          if [ "$PLUGIN_COUNT" -eq 0 ]; then
+            echo "⚠️ 警告: 没有找到打包的插件文件"
+          fi
+
+      - name: Copy packed files to mirror repo
+        if: steps.check-changes.outputs.has_changes == 'true'
+        run: |
+          echo "📁 同步文件到镜像仓库..."
+          
+          # 清理旧的插件文件（保留.github目录和其他重要文件）
+          cd mirror
+          find . -maxdepth 1 \
+            -not -name '.git' \
+            -not -name '.github' \
+            -not -name '.' \
+            -not -name '..' \
+            -not -name '.last-sync-commit' \
+            -not -name 'WORKFLOW_README.md' \
+            -not -name 'test-sync.sh' \
+            -exec rm -rf {} + 2>/dev/null || true
+          
+          # 复制新的打包文件
+          if [ -d "../source/tmp" ]; then
+            cp -rf ../source/tmp/* .
+            echo "✅ 文件同步完成"
+          else
+            echo "❌ 源文件不存在"
+            exit 1
+          fi
+          
+          # 恢复workflows
+          if [ -d "/tmp/mirror-workflows" ] && [ "$(ls -A /tmp/mirror-workflows 2>/dev/null)" ]; then
+            mkdir -p .github/workflows
+            cp -r /tmp/mirror-workflows/* .github/workflows/
+            echo "✅ Workflows 已恢复"
+          fi
+
+      - name: Update sync commit record
+        if: steps.check-changes.outputs.has_changes == 'true'
+        run: |
+          cd mirror
+          echo "${{ steps.check-changes.outputs.latest_commit }}" > .last-sync-commit
+          echo "📝 同步记录已更新"
+
+      - name: Commit and push changes
+        if: steps.check-changes.outputs.has_changes == 'true'
+        run: |
+          cd mirror
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add .
+          
+          # 检查是否有更改需要提交
+          if git diff --staged --quiet; then
+            echo "ℹ️ 没有文件变更，跳过提交"
+          else
+            # 获取源仓库的最新提交信息作为提交消息
+            cd ../source
+            COMMIT_MSG=$(git log -1 --format="%s" -- plugins-data 2>/dev/null || echo "插件更新")
+            COMMIT_HASH=$(git log -1 --format="%h" -- plugins-data 2>/dev/null || echo "unknown")
+            
+            cd ../mirror
+            git commit -m "🤖 自动同步插件更新: $COMMIT_MSG ($COMMIT_HASH)"
+            git push
+            echo "✅ 插件更新已同步并提交"
+          fi
+
+      - name: Summary
+        run: |
+          echo "📊 同步总结"
+          echo "===================="
+          if [ "${{ steps.check-changes.outputs.has_changes }}" == "true" ]; then
+            echo "✅ 检测到更新并已完成同步"
+            echo "📋 最新提交: ${{ steps.check-changes.outputs.latest_commit }}"
+            
+            # 统计信息
+            if [ -f "mirror/plugins.json" ]; then
+              PLUGIN_COUNT=$(grep -o '"name":' mirror/plugins.json | wc -l || echo "unknown")
+              echo "📦 当前插件总数: $PLUGIN_COUNT"
+            fi
+          else
+            echo "ℹ️ 无更新，跳过同步"
+            echo "📋 当前同步版本: ${{ steps.check-changes.outputs.latest_commit }}"
+          fi
+          echo "===================="

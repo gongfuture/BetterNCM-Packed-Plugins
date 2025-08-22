@@ -2,6 +2,26 @@
 
 本 Repo 是 BetterNCM 的插件库
 
+## 🤖 自动同步说明
+
+本仓库现在支持自动同步功能！我们的GitHub Actions工作流会：
+
+- 每6小时自动检查[源仓库](https://github.com/BetterNCM/BetterNCM-Plugins)的`plugins-data`目录是否有更新
+- 当检测到更新时，自动执行打包并同步到本仓库
+- 保持与官方仓库的插件数据同步
+
+### 监控状态
+可以在[Actions页面](../../actions)查看自动同步的运行状态和日志。
+
+### 手动触发
+如需立即同步，可在Actions页面手动运行"Sync and Pack Plugins"工作流。
+
+### 本地工具
+- `./check-status.sh` - 检查当前同步状态
+- `./test-sync.sh` - 测试同步逻辑
+
+详细说明请参考 [WORKFLOW_README.md](WORKFLOW_README.md)。
+
 ## 插件提交及更新
 
 0. 确认你的插件符合[上架准则](https://github.com/MicroCBer/BetterNCM/wiki/%E6%8F%92%E4%BB%B6%E5%95%86%E5%BA%97%E4%B8%8A%E6%9E%B6%E6%8F%92%E4%BB%B6%E6%96%B9%E5%BC%8F%E5%8F%8A%E5%87%86%E5%88%99#%E4%B8%8A%E6%9E%B6%E5%87%86%E5%88%99)
