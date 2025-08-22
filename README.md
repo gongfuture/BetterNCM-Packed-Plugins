@@ -13,12 +13,6 @@
 ### 监控状态
 可以在[Actions页面](../../actions)查看自动同步的运行状态和日志。
 
-### 手动触发
-如需立即同步，可在Actions页面手动运行"Sync and Pack Plugins"工作流。
-
-### 本地工具
-- `./check-status.sh` - 检查当前同步状态
-- `./test-sync.sh` - 测试同步逻辑
 
 详细说明请参考 [WORKFLOW_README.md](WORKFLOW_README.md)。
 

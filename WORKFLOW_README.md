@@ -35,7 +35,6 @@
 
 - `.github/workflows/sync-and-pack.yml`: 主要的工作流文件
 - `.last-sync-commit`: 记录上次同步的提交hash（自动生成和更新）
-- `up-repositry/`: 源代码仓库的本地克隆
 
 ## 使用说明
 
