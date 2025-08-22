@@ -157,24 +157,27 @@ jobs:
         run: |
           echo "📁 更新当前仓库的插件文件..."
           
-          # 清理旧的插件文件（保留重要文件）
-          find . -maxdepth 1 \
-            -not -name '.git' \
-            -not -name '.github' \
-            -not -name '.' \
-            -not -name '..' \
-            -not -name '.last-sync-commit' \
-            -not -name 'WORKFLOW_README.md' \
-            -not -name 'README.md' \
-            -not -name 'test-sync.sh' \
-            -not -name 'check-status.sh' \
-            -not -name 'source' \
-            -exec rm -rf {} + 2>/dev/null || true
-          
-          # 复制新的打包文件
+          # 复制新的打包文件（保留旧版本，只覆盖同名文件）
           if [ -d "source/tmp" ]; then
-            cp -rf source/tmp/* .
-            echo "✅ 文件同步完成"
+            # 确保目标目录存在
+            mkdir -p plugins previews
+            
+            # 复制插件文件
+            if [ -d "source/tmp/plugins" ]; then
+              cp -rf source/tmp/plugins/* plugins/ 2>/dev/null || true
+            fi
+            
+            # 复制预览图
+            if [ -d "source/tmp/previews" ]; then
+              cp -rf source/tmp/previews/* previews/ 2>/dev/null || true
+            fi
+            
+            # 复制plugins.json
+            if [ -f "source/tmp/plugins.json" ]; then
+              cp source/tmp/plugins.json .
+            fi
+            
+            echo "✅ 文件同步完成（保留旧版本插件）"
           else
             echo "❌ 源文件不存在"
             exit 1
@@ -192,6 +195,15 @@ jobs:
         run: |
           echo "${{ steps.check-changes.outputs.latest_commit }}" > .last-sync-commit
           echo "📝 同步记录已更新"
+
+      - name: Clean up temporary files
+        if: steps.check-changes.outputs.has_changes == 'true'
+        run: |
+          # 清理临时目录，避免提交到仓库
+          if [ -d "source" ]; then
+            rm -rf source
+            echo "🧹 临时source目录已清理"
+          fi
 
       - name: Commit and push changes
         if: steps.check-changes.outputs.has_changes == 'true'

@@ -24,7 +24,6 @@ if [ -f ".last-sync-commit" ]; then
     else
         echo "⚠️ 无法检查源仓库状态 (缺少curl命令)"
     fi
-    fi
 else
     echo "❌ 未找到同步记录，可能是首次运行"
 fi
