@@ -9,25 +9,21 @@ echo "=================================="
 if [ -f ".last-sync-commit" ]; then
     LAST_SYNC=$(cat .last-sync-commit)
     echo "📋 上次同步提交: $LAST_SYNC"
+    echo "📅 同步记录时间: $(date -r .last-sync-commit 2>/dev/null || echo "unknown")"
     
-    # 如果源仓库存在，比较版本
-    if [ -d "up-repositry" ]; then
-        cd up-repositry
-        LATEST_COMMIT=$(git log -1 --format="%H" -- plugins-data 2>/dev/null || echo "unknown")
-        LATEST_DATE=$(git log -1 --format="%ai" -- plugins-data 2>/dev/null || echo "unknown")
-        
-        echo "🆕 最新提交: $LATEST_COMMIT"
-        echo "📅 最新更新时间: $LATEST_DATE"
-        
-        if [ "$LATEST_COMMIT" != "$LAST_SYNC" ]; then
-            echo "🔄 状态: 需要同步"
-            echo "💡 建议: 手动触发 GitHub Actions 工作流"
+    # 使用GitHub API检查源仓库最新状态
+    echo "📡 检查源仓库最新状态..."
+    if command -v curl >/dev/null 2>&1; then
+        API_RESPONSE=$(curl -s "https://api.github.com/repos/BetterNCM/BetterNCM-Plugins/commits?path=plugins-data&per_page=1" 2>/dev/null)
+        if echo "$API_RESPONSE" | grep -q '"sha"'; then
+            echo "✅ 源仓库状态: 可访问"
+            echo "💡 建议: 手动触发 GitHub Actions 工作流进行同步检查"
         else
-            echo "✅ 状态: 已是最新"
+            echo "⚠️ 源仓库状态: 无法访问或API限制"
         fi
-        cd ..
     else
-        echo "⚠️ 警告: 未找到源仓库目录"
+        echo "⚠️ 无法检查源仓库状态 (缺少curl命令)"
+    fi
     fi
 else
     echo "❌ 未找到同步记录，可能是首次运行"

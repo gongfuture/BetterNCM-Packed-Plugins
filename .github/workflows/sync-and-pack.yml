@@ -14,10 +14,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - name: Checkout mirror repo
+      - name: Checkout current repo
         uses: actions/checkout@v4
         with:
-          path: 'mirror'
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -40,7 +39,7 @@ jobs:
           echo "latest_commit=$LATEST_COMMIT" >> $GITHUB_OUTPUT
           echo "✅ 最新提交: $LATEST_COMMIT"
           
-          cd ../mirror
+          cd ..
           # 检查是否有记录上次同步的提交hash
           if [ -f .last-sync-commit ]; then
             LAST_SYNC_COMMIT=$(cat .last-sync-commit)
@@ -101,16 +100,14 @@ jobs:
           echo "📦 安装脚本依赖..."
           npm install
 
-      - name: Create backup of current workflows
+      - name: Backup current workflows
         if: steps.check-changes.outputs.has_changes == 'true'
         run: |
           echo "💾 备份当前 workflows..."
-          mkdir -p /tmp/mirror-workflows
-          if [ -d "mirror/.github/workflows" ]; then
-            cp -r mirror/.github/workflows/* /tmp/mirror-workflows/ 2>/dev/null || true
+          mkdir -p /tmp/backup-workflows
+          if [ -d ".github/workflows" ]; then
+            cp -r .github/workflows/* /tmp/backup-workflows/ 2>/dev/null || true
             echo "✅ Workflows 已备份"
-          else
-            echo "⚠️ 未找到现有 workflows"
           fi
 
       - name: Run pack script
@@ -155,13 +152,12 @@ jobs:
             echo "⚠️ 警告: 没有找到打包的插件文件"
           fi
 
-      - name: Copy packed files to mirror repo
+      - name: Copy packed files to current repo
         if: steps.check-changes.outputs.has_changes == 'true'
         run: |
-          echo "📁 同步文件到镜像仓库..."
+          echo "📁 更新当前仓库的插件文件..."
           
-          # 清理旧的插件文件（保留.github目录和其他重要文件）
-          cd mirror
+          # 清理旧的插件文件（保留重要文件）
           find . -maxdepth 1 \
             -not -name '.git' \
             -not -name '.github' \
@@ -169,12 +165,15 @@ jobs:
             -not -name '..' \
             -not -name '.last-sync-commit' \
             -not -name 'WORKFLOW_README.md' \
+            -not -name 'README.md' \
             -not -name 'test-sync.sh' \
+            -not -name 'check-status.sh' \
+            -not -name 'source' \
             -exec rm -rf {} + 2>/dev/null || true
           
           # 复制新的打包文件
-          if [ -d "../source/tmp" ]; then
-            cp -rf ../source/tmp/* .
+          if [ -d "source/tmp" ]; then
+            cp -rf source/tmp/* .
             echo "✅ 文件同步完成"
           else
             echo "❌ 源文件不存在"
@@ -182,23 +181,21 @@ jobs:
           fi
           
           # 恢复workflows
-          if [ -d "/tmp/mirror-workflows" ] && [ "$(ls -A /tmp/mirror-workflows 2>/dev/null)" ]; then
+          if [ -d "/tmp/backup-workflows" ] && [ "$(ls -A /tmp/backup-workflows 2>/dev/null)" ]; then
             mkdir -p .github/workflows
-            cp -r /tmp/mirror-workflows/* .github/workflows/
+            cp -r /tmp/backup-workflows/* .github/workflows/
             echo "✅ Workflows 已恢复"
           fi
 
       - name: Update sync commit record
         if: steps.check-changes.outputs.has_changes == 'true'
         run: |
-          cd mirror
           echo "${{ steps.check-changes.outputs.latest_commit }}" > .last-sync-commit
           echo "📝 同步记录已更新"
 
       - name: Commit and push changes
         if: steps.check-changes.outputs.has_changes == 'true'
         run: |
-          cd mirror
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add .
@@ -208,14 +205,14 @@ jobs:
             echo "ℹ️ 没有文件变更，跳过提交"
           else
             # 获取源仓库的最新提交信息作为提交消息
-            cd ../source
+            cd source
             COMMIT_MSG=$(git log -1 --format="%s" -- plugins-data 2>/dev/null || echo "插件更新")
             COMMIT_HASH=$(git log -1 --format="%h" -- plugins-data 2>/dev/null || echo "unknown")
             
-            cd ../mirror
+            cd ..
             git commit -m "🤖 自动同步插件更新: $COMMIT_MSG ($COMMIT_HASH)"
             git push
-            echo "✅ 插件更新已同步并提交"
+            echo "✅ 插件更新已同步并提交到当前仓库"
           fi
 
       - name: Summary
@@ -227,8 +224,8 @@ jobs:
             echo "📋 最新提交: ${{ steps.check-changes.outputs.latest_commit }}"
             
             # 统计信息
-            if [ -f "mirror/plugins.json" ]; then
-              PLUGIN_COUNT=$(grep -o '"name":' mirror/plugins.json | wc -l || echo "unknown")
+            if [ -f "plugins.json" ]; then
+              PLUGIN_COUNT=$(grep -o '"name":' plugins.json | wc -l || echo "unknown")
               echo "📦 当前插件总数: $PLUGIN_COUNT"
             fi
           else
