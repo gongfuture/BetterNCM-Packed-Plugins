@@ -31,11 +31,9 @@ jobs:
         id: check-changes
         run: |
           cd source
+          
           # 获取最新的 plugins-data 目录的提交hash
-          if ! LATEST_COMMIT=$(git log -1 --format="%H" -- plugins-data 2>/dev/null); then
-            echo "❌ 无法获取 plugins-data 的提交历史"
-            exit 1
-          fi
+          LATEST_COMMIT=$(git log -1 --format="%H" -- plugins-data)
           echo "latest_commit=$LATEST_COMMIT" >> $GITHUB_OUTPUT
           echo "✅ 最新提交: $LATEST_COMMIT"
           
@@ -80,23 +78,6 @@ jobs:
         if: steps.check-changes.outputs.has_changes == 'true'
         run: |
           cd source/scripts
-          # 检查是否存在package.json
-          if [ ! -f package.json ]; then
-            echo "📝 创建 scripts/package.json..."
-            cat > package.json << 'EOF'
-          {
-            "name": "pack-plugins-scripts",
-            "version": "1.0.0",
-            "type": "module",
-            "dependencies": {
-              "compressing": "^1.6.2",
-              "fs-extra": "^11.1.0",
-              "compare-versions": "^5.0.1"
-            }
-          }
-          EOF
-          fi
-          
           echo "📦 安装脚本依赖..."
           npm install
 
@@ -116,14 +97,6 @@ jobs:
         run: |
           cd source/scripts/pack-plugins
           echo "🔨 开始执行打包脚本..."
-          
-          # 检查打包脚本是否存在
-          if [ ! -f pack-plugins.js ]; then
-            echo "❌ 打包脚本不存在"
-            exit 1
-          fi
-          
-          # 执行打包
           node pack-plugins.js
           echo "✅ 打包完成"
         env:
@@ -134,10 +107,10 @@ jobs:
         run: |
           echo "🔍 验证打包结果..."
           
-          # 检查source目录下的tmp
+          # 检查打包输出目录（相对于源仓库根目录）
           if [ ! -d "source/tmp" ]; then
             echo "❌ 打包输出目录 source/tmp 不存在"
-            echo "📁 当前目录结构："
+            echo "📁 源仓库根目录内容："
             ls -la source/ || echo "source目录不存在"
             exit 1
           fi
