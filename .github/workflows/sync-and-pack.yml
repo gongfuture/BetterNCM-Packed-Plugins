@@ -231,7 +231,7 @@ jobs:
             COMMIT_MSG="${{ steps.commit-info.outputs.commit_msg }}"
             COMMIT_HASH="${{ steps.commit-info.outputs.commit_hash }}"
             
-            git commit -m "🤖 自动同步插件更新: ${COMMIT_MSG} ${COMMIT_HASH}"
+            git commit -m "🤖 自动同步插件更新 ${COMMIT_HASH}"
             git push
             echo "✅ 插件更新已同步并提交到当前仓库"
           fi
