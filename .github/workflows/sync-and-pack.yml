@@ -235,6 +235,8 @@ jobs:
             git push
             echo "✅ 插件更新已同步并提交到当前仓库"
           fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Summary
         run: |
