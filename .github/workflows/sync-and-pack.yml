@@ -195,7 +195,7 @@ jobs:
         id: commit-info
         run: |
           cd source
-          COMMIT_MSG=$(git log -1 --format="%s" -- plugins-data 2>/dev/null || echo "插件更新")
+          COMMIT_MSG=$(git log -1 --format="%s" -- plugins-data 2>/dev/null | sed 's/#/num/g' | sed 's/"/\\"/g' || echo "插件更新")
           COMMIT_HASH=$(git log -1 --format="%h" -- plugins-data 2>/dev/null || echo "unknown")
           echo "commit_msg=$COMMIT_MSG" >> $GITHUB_OUTPUT
           echo "commit_hash=$COMMIT_HASH" >> $GITHUB_OUTPUT
