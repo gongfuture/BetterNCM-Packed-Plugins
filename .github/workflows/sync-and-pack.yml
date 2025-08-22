@@ -132,24 +132,30 @@ jobs:
       - name: Verify packed files
         if: steps.check-changes.outputs.has_changes == 'true'
         run: |
-          cd source
           echo "🔍 验证打包结果..."
           
-          if [ ! -d tmp ]; then
-            echo "❌ 打包输出目录不存在"
+          # 检查source目录下的tmp
+          if [ ! -d "source/tmp" ]; then
+            echo "❌ 打包输出目录 source/tmp 不存在"
+            echo "📁 当前目录结构："
+            ls -la source/ || echo "source目录不存在"
             exit 1
           fi
           
-          if [ ! -f tmp/plugins.json ]; then
-            echo "❌ plugins.json 不存在"
+          if [ ! -f "source/tmp/plugins.json" ]; then
+            echo "❌ source/tmp/plugins.json 不存在"
+            echo "📁 tmp目录内容："
+            ls -la source/tmp/ || echo "tmp目录为空"
             exit 1
           fi
           
-          PLUGIN_COUNT=$(find tmp/plugins -name "*.plugin" 2>/dev/null | wc -l || echo "0")
+          PLUGIN_COUNT=$(find source/tmp/plugins -name "*.plugin" 2>/dev/null | wc -l || echo "0")
           echo "📦 打包的插件数量: $PLUGIN_COUNT"
           
           if [ "$PLUGIN_COUNT" -eq 0 ]; then
             echo "⚠️ 警告: 没有找到打包的插件文件"
+            echo "📁 plugins目录内容："
+            ls -la source/tmp/plugins/ || echo "plugins目录不存在"
           fi
 
       - name: Copy packed files to current repo
@@ -231,7 +237,7 @@ jobs:
             COMMIT_MSG="${{ steps.commit-info.outputs.commit_msg }}"
             COMMIT_HASH="${{ steps.commit-info.outputs.commit_hash }}"
             
-            git commit -m "🤖 自动同步插件更新 ${COMMIT_HASH}"
+            git commit -m "🤖 自动同步插件更新 $COMMIT_MSG ($COMMIT_HASH)"
             git push
             echo "✅ 插件更新已同步并提交到当前仓库"
           fi
