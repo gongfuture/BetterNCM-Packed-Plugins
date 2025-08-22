@@ -190,6 +190,17 @@ jobs:
             echo "✅ Workflows 已恢复"
           fi
 
+      - name: Get commit info for later use
+        if: steps.check-changes.outputs.has_changes == 'true'
+        id: commit-info
+        run: |
+          cd source
+          COMMIT_MSG=$(git log -1 --format="%s" -- plugins-data 2>/dev/null || echo "插件更新")
+          COMMIT_HASH=$(git log -1 --format="%h" -- plugins-data 2>/dev/null || echo "unknown")
+          echo "commit_msg=$COMMIT_MSG" >> $GITHUB_OUTPUT
+          echo "commit_hash=$COMMIT_HASH" >> $GITHUB_OUTPUT
+          cd ..
+
       - name: Update sync commit record
         if: steps.check-changes.outputs.has_changes == 'true'
         run: |
@@ -216,12 +227,10 @@ jobs:
           if git diff --staged --quiet; then
             echo "ℹ️ 没有文件变更，跳过提交"
           else
-            # 获取源仓库的最新提交信息作为提交消息
-            cd source
-            COMMIT_MSG=$(git log -1 --format="%s" -- plugins-data 2>/dev/null || echo "插件更新")
-            COMMIT_HASH=$(git log -1 --format="%h" -- plugins-data 2>/dev/null || echo "unknown")
+            # 使用预先获取的提交信息
+            COMMIT_MSG="${{ steps.commit-info.outputs.commit_msg }}"
+            COMMIT_HASH="${{ steps.commit-info.outputs.commit_hash }}"
             
-            cd ..
             git commit -m "🤖 自动同步插件更新: $COMMIT_MSG ($COMMIT_HASH)"
             git push
             echo "✅ 插件更新已同步并提交到当前仓库"
